@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // kanarienkrebs — diff-scoped, fail-closed runtime-validation gate (MVP: TS/Node lane).
 // Usage:
-//   kanarienkrebs --repo <path> --test-command "<cmd>" [--base <ref>] [--report-file <p>] [--allow-empty] [--timeout-ms <n>]
-//   kanarienkrebs --validate   (prove the runtime layer actually flips a clean run into a throw)
+//   kanarienkrebs --repo <path> [--lane ts|go] [--test-command "<cmd>"] [--base <ref>] [--report-file <p>] [--allow-empty] [--timeout-ms <n>]
+//   kanarienkrebs --validate [--lane ts|go]   (prove the runtime layer is genuinely live)
+// Lane auto-detects from the repo (go.mod => go) unless --lane is given.
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { runUnderLayer, validateLayer } from "./ts-runtime-lane.mjs";
+import { runGoRace, validateGoLayer, hasGoMod, goAvailable } from "./go-race-lane.mjs";
 import { decideValidationVerdict, summarizeValidation } from "../core/report.mjs";
 import { repoHead, changedFiles } from "../core/diff.mjs";
 
@@ -23,32 +25,50 @@ function parseArgs(argv) {
     else if (k === "--report-file") a.reportFile = next();
     else if (k === "--allow-empty") a.allowEmpty = true;
     else if (k === "--timeout-ms") a.timeoutMs = parseInt(next(), 10);
+    else if (k === "--lane") a.lane = next();
     else if (k === "--validate") a.validate = true;
   }
   return a;
 }
 
 const a = parseArgs(process.argv.slice(2));
+const lane = a.lane ?? (a.repo && hasGoMod(a.repo) ? "go" : "ts");
+const laneName = lane === "go" ? "go-race" : "ts-runtime";
 
 if (a.validate) {
-  const canary = join(HERE, "..", "fixtures", "canary-runtime", "deprecation-canary.mjs");
-  const live = validateLayer(canary);
-  console.log(`kanarienkrebs validate-provider · lane=ts-runtime · layerActive=${live}`);
-  console.log(live ? "  ✓ ENGINE_OK (the strict layer turned a clean run into a throw)" : "  ✗ QUARANTINED (layer had no effect — flags not honored)");
+  let live;
+  if (lane === "go") {
+    if (!goAvailable()) { console.error("kanarienkrebs: go not on PATH — cannot validate the go-race lane"); process.exit(69); }
+    live = validateGoLayer(join(HERE, "..", "fixtures", "canary-go"));
+  } else {
+    live = validateLayer(join(HERE, "..", "fixtures", "canary-runtime", "deprecation-canary.mjs"));
+  }
+  console.log(`kanarienkrebs validate-provider · lane=${laneName} · layerActive=${live}`);
+  console.log(live ? "  ✓ ENGINE_OK (the layer is genuinely live)" : "  ✗ QUARANTINED (layer had no effect)");
   process.exit(live ? 0 : 5);
 }
 
-if (!a.repo || !a.testCommand) {
-  console.error('kanarienkrebs: --repo <path> and --test-command "<cmd>" required (or --validate)');
+if (!a.repo) {
+  console.error("kanarienkrebs: --repo <path> required (or --validate)");
   process.exit(64);
 }
+if (lane === "ts" && !a.testCommand) {
+  console.error('kanarienkrebs: --test-command "<cmd>" required for the ts lane');
+  process.exit(64);
+}
+if (lane === "go" && !goAvailable()) {
+  console.error("kanarienkrebs: go not on PATH — cannot run the go-race lane");
+  process.exit(69);
+}
 
-const run = runUnderLayer({ repo: a.repo, command: a.testCommand, timeoutMs: a.timeoutMs });
+const run = lane === "go"
+  ? runGoRace({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
+  : runUnderLayer({ repo: a.repo, command: a.testCommand, timeoutMs: a.timeoutMs });
 const changed = a.base ? changedFiles(a.repo, a.base) : null;
 
 const report = {
   tool: "kanarienkrebs",
-  lane: "ts-runtime",
+  lane: laneName,
   repo: a.repo,
   base: a.base ?? null,
   sha: repoHead(a.repo),

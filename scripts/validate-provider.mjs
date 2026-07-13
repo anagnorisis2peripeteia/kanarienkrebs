@@ -1,75 +1,63 @@
 #!/usr/bin/env node
 // validate-provider.mjs
 //
-// Gate analog of marmorkrebs's "validate_providers" step for the kanarienkrebs
-// repo: proves that the runtime-validation canary lane is actually live — i.e.
-// --validate mode catches its own planted canary — before the lane is trusted
-// as a PR gate.
+// Gate analog of marmorkrebs's "validate_providers" step for kanarienkrebs: proves
+// each runtime-validation LANE is actually live — i.e. --validate mode catches its
+// own planted canary — before the lane is trusted as a PR gate. Fail-closed: an
+// un-provable lane blocks the gate. A lane whose toolchain is absent on this box is
+// SKIPPED (not failed), so a Node-only CI stays green while local runs prove both.
 //
-// Runs: node kanarienkrebs/cli.mjs --validate
-//
-// Asserts exit 0. Prints a summary. Exits nonzero on failure (fail-closed: an
-// un-provable provider must block the gate, not pass it).
+//   ts-runtime: node kanarienkrebs/cli.mjs --validate
+//   go-race   : node kanarienkrebs/cli.mjs --validate --lane go   (requires `go`)
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
+const CLI = path.join(repoRoot, "kanarienkrebs", "cli.mjs");
 
-const provider = { name: "kanarienkrebs", script: path.join(repoRoot, "kanarienkrebs", "cli.mjs") };
+const LANES = [
+  { name: "ts-runtime", args: ["--validate"] },
+  { name: "go-race", args: ["--validate", "--lane", "go"], requires: "go" },
+];
 
-function runValidate({ name, script }) {
+function toolAvailable(tool) {
+  const r = spawnSync(tool, ["version"], { encoding: "utf8" });
+  return !r.error && r.status === 0;
+}
+
+function runValidate(args) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [script, "--validate"], {
-      cwd: repoRoot,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-
-    child.on("error", (err) => {
-      resolve({ name, exitCode: null, stdout, stderr: `${stderr}\n${err.message}`, error: err });
-    });
-
-    child.on("close", (exitCode) => {
-      resolve({ name, exitCode, stdout, stderr });
-    });
+    const child = spawn(process.execPath, [CLI, ...args], { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", (c) => (stdout += c));
+    child.stderr.on("data", (c) => (stderr += c));
+    child.on("error", (err) => resolve({ exitCode: null, stdout, stderr: `${stderr}\n${err.message}` }));
+    child.on("close", (exitCode) => resolve({ exitCode, stdout, stderr }));
   });
 }
 
 async function main() {
-  const result = await runValidate(provider);
-
-  console.log("validate-provider: kanarienkrebs canary gate");
+  console.log("validate-provider: kanarienkrebs canary gates");
   console.log("=".repeat(48));
-
-  const ok = result.exitCode === 0;
-  const status = ok ? "OK" : "FAIL";
-  console.log(`- ${result.name}: ${status} (exit=${result.exitCode})`);
-  if (result.stdout.trim()) {
-    for (const line of result.stdout.trim().split("\n")) {
-      console.log(`    ${line}`);
+  let allOk = true;
+  for (const lane of LANES) {
+    if (lane.requires && !toolAvailable(lane.requires)) {
+      console.log(`- ${lane.name}: SKIP (${lane.requires} not on PATH)`);
+      continue;
     }
+    const result = await runValidate(lane.args);
+    const ok = result.exitCode === 0;
+    if (!ok) allOk = false;
+    console.log(`- ${lane.name}: ${ok ? "OK" : "FAIL"} (exit=${result.exitCode})`);
+    for (const line of (result.stdout.trim() ? result.stdout.trim().split("\n") : [])) console.log(`    ${line}`);
+    if (!ok) for (const line of (result.stderr.trim() ? result.stderr.trim().split("\n") : [])) console.error(`    ! ${line}`);
   }
-  if (!ok && result.stderr.trim()) {
-    for (const line of result.stderr.trim().split("\n")) {
-      console.error(`    ! ${line}`);
-    }
-  }
-
   console.log("=".repeat(48));
-  console.log(ok ? "validate-provider: PASS (canary live)" : "validate-provider: FAIL");
-
-  process.exitCode = ok ? 0 : 1;
+  console.log(allOk ? "validate-provider: PASS (lanes live)" : "validate-provider: FAIL");
+  process.exitCode = allOk ? 0 : 1;
 }
 
 main();
