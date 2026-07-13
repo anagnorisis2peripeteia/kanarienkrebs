@@ -21,11 +21,16 @@ const CLI = path.join(repoRoot, "kanarienkrebs", "cli.mjs");
 const LANES = [
   { name: "ts-runtime", args: ["--validate"] },
   { name: "go-race", args: ["--validate", "--lane", "go"], requires: "go" },
+  { name: "python-dev", args: ["--validate", "--lane", "python"], requires: "python3" },
 ];
 
 function toolAvailable(tool) {
-  const r = spawnSync(tool, ["version"], { encoding: "utf8" });
-  return !r.error && r.status === 0;
+  // `python3 --version` and `node --version` use --version; `go version` uses a subcommand.
+  for (const va of [["--version"], ["version"]]) {
+    const r = spawnSync(tool, va, { encoding: "utf8" });
+    if (!r.error && r.status === 0) return true;
+  }
+  return false;
 }
 
 function runValidate(args) {

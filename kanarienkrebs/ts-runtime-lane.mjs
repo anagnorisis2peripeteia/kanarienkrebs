@@ -6,7 +6,10 @@
 import { spawnSync } from "node:child_process";
 
 const STRICT = ["--unhandled-rejections=throw", "--throw-deprecation"];
-const DIAG_RE = /(UnhandledPromiseRejection|DeprecationWarning|ExperimentalWarning|ResourceWarning|Warning:)/;
+// Match a REAL Node warning emission (a `<Category>Warning:` with the colon, as Node
+// prints `(node:PID) DeprecationWarning: ...`), not the mere mention of the word — a
+// test name like "surfaces a DeprecationWarning as a failure" must NOT be a diagnostic.
+const DIAG_RE = /\w*Warning:|UnhandledPromiseRejection/;
 
 export function runUnderLayer({ repo, command, timeoutMs = 120000 }) {
   const layer = STRICT.join(" ");

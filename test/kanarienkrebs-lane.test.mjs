@@ -24,6 +24,15 @@ test("runUnderLayer on a trivial passing command returns exitCode 0 with no diag
   assert.equal(result.timedOut, false);
 });
 
+test("runUnderLayer does not flag a benign mention of a warning word (regression: no false positive)", () => {
+  const result = runUnderLayer({
+    repo: REPO_ROOT,
+    command: `node -e "console.log('handles a DeprecationWarning gracefully'); process.exit(0)"`,
+  });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(result.diagnostics, []);
+});
+
 test("runUnderLayer honors a custom timeoutMs (large monorepo suites need a raised budget)", () => {
   const result = runUnderLayer({
     repo: REPO_ROOT,
