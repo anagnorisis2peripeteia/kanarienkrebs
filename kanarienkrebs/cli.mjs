@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // kanarienkrebs — diff-scoped, fail-closed runtime-validation gate (MVP: TS/Node lane).
 // Usage:
-//   kanarienkrebs --repo <path> --test-command "<cmd>" [--base <ref>] [--report-file <p>] [--allow-empty]
+//   kanarienkrebs --repo <path> --test-command "<cmd>" [--base <ref>] [--report-file <p>] [--allow-empty] [--timeout-ms <n>]
 //   kanarienkrebs --validate   (prove the runtime layer actually flips a clean run into a throw)
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -22,6 +22,7 @@ function parseArgs(argv) {
     else if (k === "--base") a.base = next();
     else if (k === "--report-file") a.reportFile = next();
     else if (k === "--allow-empty") a.allowEmpty = true;
+    else if (k === "--timeout-ms") a.timeoutMs = parseInt(next(), 10);
     else if (k === "--validate") a.validate = true;
   }
   return a;
@@ -42,7 +43,7 @@ if (!a.repo || !a.testCommand) {
   process.exit(64);
 }
 
-const run = runUnderLayer({ repo: a.repo, command: a.testCommand });
+const run = runUnderLayer({ repo: a.repo, command: a.testCommand, timeoutMs: a.timeoutMs });
 const changed = a.base ? changedFiles(a.repo, a.base) : null;
 
 const report = {
