@@ -24,6 +24,15 @@ test("runUnderLayer on a trivial passing command returns exitCode 0 with no diag
   assert.equal(result.timedOut, false);
 });
 
+test("runUnderLayer honors a custom timeoutMs (large monorepo suites need a raised budget)", () => {
+  const result = runUnderLayer({
+    repo: REPO_ROOT,
+    command: 'node -e "setTimeout(() => {}, 5000)"',
+    timeoutMs: 300,
+  });
+  assert.equal(result.timedOut, true);
+});
+
 test("validateLayer is robust to strict NODE_OPTIONS already in the environment (regression)", () => {
   // Before the fix, the "plain" baseline spawn inherited NODE_OPTIONS, so with strict
   // flags already set the canary's deprecation threw there too, plain.status !== 0, and
