@@ -39,8 +39,16 @@ export function runUnderLayer({ repo, command, timeoutMs = 120000 }) {
 /** validate-provider: the canary emits a DeprecationWarning; under --throw-deprecation
  *  the process MUST exit nonzero. Nonzero => the layer is genuinely live. */
 export function validateLayer(canaryPath) {
-  const withLayer = spawnSync(process.execPath, [...STRICT, canaryPath], { encoding: "utf8" });
-  const plain = spawnSync(process.execPath, [canaryPath], { encoding: "utf8" });
-  // live iff the layer flips a clean(0) run into a throw(nonzero)
+  // The "plain" baseline MUST be genuinely unflagged. NODE_OPTIONS is inherited from the
+  // environment, so if the caller already runs under strict flags (kanarienkrebs gating
+  // ITSELF, or any CI that sets NODE_OPTIONS) an un-scrubbed plain run would also throw
+  // on the canary's deprecation and validateLayer would falsely report the layer dead —
+  // a spurious QUARANTINE. Strip NODE_OPTIONS from both children and drive the strict run
+  // purely via argv flags, so the check is independent of the ambient environment.
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.NODE_OPTIONS;
+  const withLayer = spawnSync(process.execPath, [...STRICT, canaryPath], { encoding: "utf8", env: cleanEnv });
+  const plain = spawnSync(process.execPath, [canaryPath], { encoding: "utf8", env: cleanEnv });
+  // live iff the strict flags flip a clean(0) run into a throw(nonzero)
   return withLayer.status !== 0 && plain.status === 0;
 }

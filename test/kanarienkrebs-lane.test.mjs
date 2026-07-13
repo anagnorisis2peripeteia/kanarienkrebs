@@ -23,3 +23,18 @@ test("runUnderLayer on a trivial passing command returns exitCode 0 with no diag
   assert.deepEqual(result.diagnostics, []);
   assert.equal(result.timedOut, false);
 });
+
+test("validateLayer is robust to strict NODE_OPTIONS already in the environment (regression)", () => {
+  // Before the fix, the "plain" baseline spawn inherited NODE_OPTIONS, so with strict
+  // flags already set the canary's deprecation threw there too, plain.status !== 0, and
+  // validateLayer wrongly returned false (spurious quarantine) — exactly what kanarienkrebs
+  // gating ITSELF, or any CI with NODE_OPTIONS set, would hit. It must still report live.
+  const saved = process.env.NODE_OPTIONS;
+  process.env.NODE_OPTIONS = "--throw-deprecation";
+  try {
+    assert.equal(validateLayer(CANARY), true);
+  } finally {
+    if (saved === undefined) delete process.env.NODE_OPTIONS;
+    else process.env.NODE_OPTIONS = saved;
+  }
+});
