@@ -7,8 +7,10 @@
 // un-provable lane blocks the gate. A lane whose toolchain is absent on this box is
 // SKIPPED (not failed), so a Node-only CI stays green while local runs prove both.
 //
-//   ts-runtime: node kanarienkrebs/cli.mjs --validate
-//   go-race   : node kanarienkrebs/cli.mjs --validate --lane go   (requires `go`)
+//   ts-runtime    : node kanarienkrebs/cli.mjs --validate
+//   go-race       : node kanarienkrebs/cli.mjs --validate --lane go       (requires `go`)
+//   python-dev    : node kanarienkrebs/cli.mjs --validate --lane python   (requires `python3`)
+//   dotnet-runtime: node kanarienkrebs/cli.mjs --validate --lane dotnet   (requires `dotnet`)
 
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -22,6 +24,7 @@ const LANES = [
   { name: "ts-runtime", args: ["--validate"] },
   { name: "go-race", args: ["--validate", "--lane", "go"], requires: "go" },
   { name: "python-dev", args: ["--validate", "--lane", "python"], requires: "python3" },
+  { name: "dotnet-runtime", args: ["--validate", "--lane", "dotnet"], requires: "dotnet" },
 ];
 
 function toolAvailable(tool) {

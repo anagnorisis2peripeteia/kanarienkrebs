@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    validate-provider canary for kanarienkrebs' dotnet-runtime lane.
+
+    Program.cs plants a REAL latent globalization hazard (constructing a named
+    culture). Under the strict layer (DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1) that
+    construction throws CultureNotFoundException and the process exits nonzero;
+    without the layer it exits 0. The lane is proven live only if the strict layer
+    flips 0 -> nonzero.
+
+    IMPORTANT: <InvariantGlobalization> is intentionally NOT set here — the lane
+    toggles invariant globalization via the environment. Baking it in would make
+    BOTH runs throw and destroy the flip.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>canary</AssemblyName>
+  </PropertyGroup>
+
+</Project>

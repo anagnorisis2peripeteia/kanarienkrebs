@@ -4,3 +4,7 @@ authored/
 .DS_Store
 /tmp
 *.log
+
+# .NET build artifacts (the dotnet-runtime lane builds the canary in place)
+bin/
+obj/
