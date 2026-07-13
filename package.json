@@ -1,0 +1,16 @@
+{
+  "name": "kanarienkrebs",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "kanarienkrebs — diff-scoped, fail-closed runtime-validation gate (point-and-go: reruns a repo's existing tests under a stricter runtime layer)",
+  "bin": {
+    "kanarienkrebs": "./kanarienkrebs/cli.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check kanarienkrebs/cli.mjs && node --check kanarienkrebs/ts-runtime-lane.mjs && node --check core/report.mjs && node --check core/diff.mjs && node --check scripts/validate-provider.mjs",
+    "validate:provider": "node scripts/validate-provider.mjs",
+    "lint": "npm run check"
+  }
+}

@@ -1,0 +1,6 @@
+node_modules/
+authored/
+*.report.json
+.DS_Store
+/tmp
+*.log
