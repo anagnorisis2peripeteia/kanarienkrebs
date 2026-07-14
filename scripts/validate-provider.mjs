@@ -11,6 +11,8 @@
 //   go-race       : node kanarienkrebs/cli.mjs --validate --lane go       (requires `go`)
 //   python-dev    : node kanarienkrebs/cli.mjs --validate --lane python   (requires `python3`)
 //   dotnet-runtime: node kanarienkrebs/cli.mjs --validate --lane dotnet   (requires `dotnet`)
+//   cpp-sanitizer : node kanarienkrebs/cli.mjs --validate --lane cpp      (requires `clang++`)
+//   metal-validation: node kanarienkrebs/cli.mjs --validate --lane metal  (requires `xcrun`/Metal)
 
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -20,11 +22,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const CLI = path.join(repoRoot, "kanarienkrebs", "cli.mjs");
 
+// EX_UNAVAILABLE — the CLI's exit code when a lane's toolchain is absent. Treat it as
+// SKIP (not FAIL), so a box missing e.g. the Metal toolchain stays green.
+const EX_UNAVAILABLE = 69;
+
 const LANES = [
   { name: "ts-runtime", args: ["--validate"] },
   { name: "go-race", args: ["--validate", "--lane", "go"], requires: "go" },
   { name: "python-dev", args: ["--validate", "--lane", "python"], requires: "python3" },
   { name: "dotnet-runtime", args: ["--validate", "--lane", "dotnet"], requires: "dotnet" },
+  { name: "cpp-sanitizer", args: ["--validate", "--lane", "cpp"], requires: "clang++" },
+  // metal needs the Metal toolchain + a GPU; `xcrun` gates macOS, and the CLI itself
+  // reports EX_UNAVAILABLE (=> SKIP below) if `xcrun -f metal` can't resolve the compiler.
+  { name: "metal-validation", args: ["--validate", "--lane", "metal"], requires: "xcrun" },
 ];
 
 function toolAvailable(tool) {
@@ -57,6 +67,10 @@ async function main() {
       continue;
     }
     const result = await runValidate(lane.args);
+    if (result.exitCode === EX_UNAVAILABLE) {
+      console.log(`- ${lane.name}: SKIP (toolchain unavailable on this box)`);
+      continue;
+    }
     const ok = result.exitCode === 0;
     if (!ok) allOk = false;
     console.log(`- ${lane.name}: ${ok ? "OK" : "FAIL"} (exit=${result.exitCode})`);

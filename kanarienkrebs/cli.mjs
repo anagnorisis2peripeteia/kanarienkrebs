@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // kanarienkrebs — diff-scoped, fail-closed runtime-validation gate (MVP: TS/Node lane).
 // Usage:
-//   kanarienkrebs --repo <path> [--lane ts|go|python|dotnet] [--test-command "<cmd>"] [--base <ref>] [--report-file <p>] [--allow-empty] [--timeout-ms <n>]
-//   kanarienkrebs --validate [--lane ts|go|python|dotnet]   (prove the runtime layer is genuinely live)
-// Lane auto-detects from the repo (go.mod => go; pure-python => python; .sln/.csproj => dotnet) unless --lane is given.
+//   kanarienkrebs --repo <path> [--lane ts|go|python|dotnet|cpp|metal] [--test-command "<cmd>"] [--base <ref>] [--report-file <p>] [--allow-empty] [--timeout-ms <n>]
+//   kanarienkrebs --validate [--lane ts|go|python|dotnet|cpp|metal]   (prove the runtime layer is genuinely live)
+// Lane auto-detects from the repo (go.mod => go; *.metal => metal; pure-python => python;
+//   .sln/.csproj => dotnet; C++ sources/CMake => cpp) unless --lane is given.
 import { writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -11,6 +12,8 @@ import { runUnderLayer, validateLayer } from "./ts-runtime-lane.mjs";
 import { runGoRace, validateGoLayer, hasGoMod, goAvailable } from "./go-race-lane.mjs";
 import { runUnderDevMode, validatePythonLayer, hasPython, pythonAvailable } from "./python-dev-lane.mjs";
 import { runDotnet, validateDotnetLayer, hasDotnet, dotnetAvailable } from "./dotnet-runtime-lane.mjs";
+import { runCpp, validateCppLayer, hasCpp, cppAvailable } from "./cpp-sanitizer-lane.mjs";
+import { runMetal, validateMetalLayer, hasMetal, metalAvailable } from "./metal-validation-lane.mjs";
 import { decideValidationVerdict, summarizeValidation } from "../core/report.mjs";
 import { repoHead, changedFiles } from "../core/diff.mjs";
 
@@ -34,13 +37,21 @@ function parseArgs(argv) {
 }
 
 const a = parseArgs(process.argv.slice(2));
+const noPkg = (repo) => !existsSync(join(repo, "package.json"));
 const lane = a.lane ?? (
   a.repo && hasGoMod(a.repo) ? "go"
-    : a.repo && hasPython(a.repo) && !existsSync(join(a.repo, "package.json")) ? "python"
-      : a.repo && hasDotnet(a.repo) && !existsSync(join(a.repo, "package.json")) ? "dotnet"
-        : "ts"
+    : a.repo && hasMetal(a.repo) && noPkg(a.repo) ? "metal"
+      : a.repo && hasPython(a.repo) && noPkg(a.repo) ? "python"
+        : a.repo && hasDotnet(a.repo) && noPkg(a.repo) ? "dotnet"
+          : a.repo && hasCpp(a.repo) && noPkg(a.repo) ? "cpp"
+            : "ts"
 );
-const laneName = lane === "go" ? "go-race" : lane === "python" ? "python-dev" : lane === "dotnet" ? "dotnet-runtime" : "ts-runtime";
+const laneName = lane === "go" ? "go-race"
+  : lane === "python" ? "python-dev"
+    : lane === "dotnet" ? "dotnet-runtime"
+      : lane === "cpp" ? "cpp-sanitizer"
+        : lane === "metal" ? "metal-validation"
+          : "ts-runtime";
 
 if (a.validate) {
   let live;
@@ -53,6 +64,12 @@ if (a.validate) {
   } else if (lane === "dotnet") {
     if (!dotnetAvailable()) { console.error("kanarienkrebs: dotnet not on PATH — cannot validate the dotnet-runtime lane"); process.exit(69); }
     live = validateDotnetLayer(join(HERE, "..", "fixtures", "canary-dotnet"));
+  } else if (lane === "cpp") {
+    if (!cppAvailable()) { console.error("kanarienkrebs: clang++ not on PATH — cannot validate the cpp-sanitizer lane"); process.exit(69); }
+    live = validateCppLayer(join(HERE, "..", "fixtures", "canary-cpp"));
+  } else if (lane === "metal") {
+    if (!metalAvailable()) { console.error("kanarienkrebs: Metal toolchain (xcrun metal) unavailable — cannot validate the metal-validation lane"); process.exit(69); }
+    live = validateMetalLayer(join(HERE, "..", "fixtures", "canary-metal"));
   } else {
     live = validateLayer(join(HERE, "..", "fixtures", "canary-runtime", "deprecation-canary.mjs"));
   }
@@ -65,7 +82,7 @@ if (!a.repo) {
   console.error("kanarienkrebs: --repo <path> required (or --validate)");
   process.exit(64);
 }
-if ((lane === "ts" || lane === "python") && !a.testCommand) {
+if ((lane === "ts" || lane === "python" || lane === "cpp" || lane === "metal") && !a.testCommand) {
   console.error(`kanarienkrebs: --test-command "<cmd>" required for the ${lane} lane`);
   process.exit(64);
 }
@@ -81,6 +98,14 @@ if (lane === "dotnet" && !dotnetAvailable()) {
   console.error("kanarienkrebs: dotnet not on PATH — cannot run the dotnet-runtime lane");
   process.exit(69);
 }
+if (lane === "cpp" && !cppAvailable()) {
+  console.error("kanarienkrebs: clang++ not on PATH — cannot run the cpp-sanitizer lane");
+  process.exit(69);
+}
+if (lane === "metal" && !metalAvailable()) {
+  console.error("kanarienkrebs: Metal toolchain (xcrun metal) unavailable — cannot run the metal-validation lane");
+  process.exit(69);
+}
 
 const run = lane === "go"
   ? runGoRace({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
@@ -88,7 +113,11 @@ const run = lane === "go"
     ? runUnderDevMode({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
     : lane === "dotnet"
       ? runDotnet({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
-      : runUnderLayer({ repo: a.repo, command: a.testCommand, timeoutMs: a.timeoutMs });
+      : lane === "cpp"
+        ? runCpp({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
+        : lane === "metal"
+          ? runMetal({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
+          : runUnderLayer({ repo: a.repo, command: a.testCommand, timeoutMs: a.timeoutMs });
 const changed = a.base ? changedFiles(a.repo, a.base) : null;
 
 const report = {
