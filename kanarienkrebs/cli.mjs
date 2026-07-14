@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 // kanarienkrebs — diff-scoped, fail-closed runtime-validation gate (MVP: TS/Node lane).
 // Usage:
-//   kanarienkrebs --repo <path> [--lane ts|go|python] [--test-command "<cmd>"] [--base <ref>] [--report-file <p>] [--allow-empty] [--timeout-ms <n>]
-//   kanarienkrebs --validate [--lane ts|go|python]   (prove the runtime layer is genuinely live)
-// Lane auto-detects from the repo (go.mod => go; pure-python => python) unless --lane is given.
+//   kanarienkrebs --repo <path> [--lane ts|go|python|dotnet] [--test-command "<cmd>"] [--base <ref>] [--report-file <p>] [--allow-empty] [--timeout-ms <n>]
+//   kanarienkrebs --validate [--lane ts|go|python|dotnet]   (prove the runtime layer is genuinely live)
+// Lane auto-detects from the repo (go.mod => go; pure-python => python; .sln/.csproj => dotnet) unless --lane is given.
 import { writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { runUnderLayer, validateLayer } from "./ts-runtime-lane.mjs";
 import { runGoRace, validateGoLayer, hasGoMod, goAvailable } from "./go-race-lane.mjs";
 import { runUnderDevMode, validatePythonLayer, hasPython, pythonAvailable } from "./python-dev-lane.mjs";
+import { runDotnet, validateDotnetLayer, hasDotnet, dotnetAvailable } from "./dotnet-runtime-lane.mjs";
 import { decideValidationVerdict, summarizeValidation } from "../core/report.mjs";
 import { repoHead, changedFiles } from "../core/diff.mjs";
 
@@ -36,9 +37,10 @@ const a = parseArgs(process.argv.slice(2));
 const lane = a.lane ?? (
   a.repo && hasGoMod(a.repo) ? "go"
     : a.repo && hasPython(a.repo) && !existsSync(join(a.repo, "package.json")) ? "python"
-      : "ts"
+      : a.repo && hasDotnet(a.repo) && !existsSync(join(a.repo, "package.json")) ? "dotnet"
+        : "ts"
 );
-const laneName = lane === "go" ? "go-race" : lane === "python" ? "python-dev" : "ts-runtime";
+const laneName = lane === "go" ? "go-race" : lane === "python" ? "python-dev" : lane === "dotnet" ? "dotnet-runtime" : "ts-runtime";
 
 if (a.validate) {
   let live;
@@ -48,6 +50,9 @@ if (a.validate) {
   } else if (lane === "python") {
     if (!pythonAvailable()) { console.error("kanarienkrebs: python3 not on PATH — cannot validate the python-dev lane"); process.exit(69); }
     live = validatePythonLayer(join(HERE, "..", "fixtures", "canary-python", "deprecation_canary.py"));
+  } else if (lane === "dotnet") {
+    if (!dotnetAvailable()) { console.error("kanarienkrebs: dotnet not on PATH — cannot validate the dotnet-runtime lane"); process.exit(69); }
+    live = validateDotnetLayer(join(HERE, "..", "fixtures", "canary-dotnet"));
   } else {
     live = validateLayer(join(HERE, "..", "fixtures", "canary-runtime", "deprecation-canary.mjs"));
   }
@@ -72,12 +77,18 @@ if (lane === "python" && !pythonAvailable()) {
   console.error("kanarienkrebs: python3 not on PATH — cannot run the python-dev lane");
   process.exit(69);
 }
+if (lane === "dotnet" && !dotnetAvailable()) {
+  console.error("kanarienkrebs: dotnet not on PATH — cannot run the dotnet-runtime lane");
+  process.exit(69);
+}
 
 const run = lane === "go"
   ? runGoRace({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
   : lane === "python"
     ? runUnderDevMode({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
-    : runUnderLayer({ repo: a.repo, command: a.testCommand, timeoutMs: a.timeoutMs });
+    : lane === "dotnet"
+      ? runDotnet({ repo: a.repo, testCommand: a.testCommand, timeoutMs: a.timeoutMs })
+      : runUnderLayer({ repo: a.repo, command: a.testCommand, timeoutMs: a.timeoutMs });
 const changed = a.base ? changedFiles(a.repo, a.base) : null;
 
 const report = {

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check kanarienkrebs/cli.mjs && node --check kanarienkrebs/ts-runtime-lane.mjs && node --check kanarienkrebs/go-race-lane.mjs && node --check kanarienkrebs/python-dev-lane.mjs && node --check core/report.mjs && node --check core/diff.mjs && node --check scripts/validate-provider.mjs",
+    "check": "node --check kanarienkrebs/cli.mjs && node --check kanarienkrebs/ts-runtime-lane.mjs && node --check kanarienkrebs/go-race-lane.mjs && node --check kanarienkrebs/python-dev-lane.mjs && node --check kanarienkrebs/dotnet-runtime-lane.mjs && node --check core/report.mjs && node --check core/diff.mjs && node --check scripts/validate-provider.mjs",
     "validate:provider": "node scripts/validate-provider.mjs",
     "lint": "npm run check"
   }
