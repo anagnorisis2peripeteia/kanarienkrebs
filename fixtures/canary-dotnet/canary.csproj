@@ -16,6 +16,11 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <!-- Build against the LTS net8.0 targeting pack (widely present), but roll forward at
+         runtime to whatever .NET major is actually installed (e.g. net10.0) — otherwise the
+         canary can't run on a box without the net8.0 runtime and the validate flip never fires
+         (the lane then quarantines itself). LatestMajor survives future .NET version churn. -->
+    <RollForward>LatestMajor</RollForward>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <AssemblyName>canary</AssemblyName>
