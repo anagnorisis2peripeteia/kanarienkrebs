@@ -31,6 +31,9 @@ asserts this canary is caught before the gate is trusted at all.
 # Prove the runtime layer is genuinely live (planted canary must be caught)
 kanarienkrebs --validate
 
+# Show a scaffolded C# lane validation path (Roslyn-instrumentation phase-1)
+kanarienkrebs --validate --lane csharp-roslyn
+
 # Rerun a repo's test command under the strict layer
 kanarienkrebs --repo <path> --test-command "<cmd>" [--base <ref>] [--report-file <path>] [--allow-empty]
 ```
@@ -53,6 +56,18 @@ kanarienkrebs --repo <path> --test-command "<cmd>" [--base <ref>] [--report-file
 | `ERROR`       | 6    | The run timed out.                                                 |
 | `QUARANTINED` | 5    | The runtime layer could not be proven live — result is untrusted. |
 
+## Supported Lanes
+
+| Lane | Description |
+|------|-------------|
+| `ts` | Node runtime with strict runtime flags (`--unhandled-rejections=throw`, `--throw-deprecation`). |
+| `go` | Go race-instrumented test execution. |
+| `python` | Python deprecation-focused runtime profile. |
+| `dotnet` | .NET runtime strict globalization layer (`DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`). |
+| `csharp-roslyn` | **Scaffold only**: explicit C#/.NET lane skeleton; Roslyn runtime instrumentation not yet implemented. |
+| `cpp` | C++ sanitizer layer (`-fsanitize=address,undefined`). |
+| `metal` | Metal layer validation via `MTL_SHADER_VALIDATION=1` and build tags. |
+
 ## Layout
 
 ```
@@ -60,7 +75,9 @@ core/report.mjs        — verdict logic + summary formatting (validation-only f
 core/diff.mjs           — shared git diff-scoping helpers
 kanarienkrebs/cli.mjs    — CLI entrypoint
 kanarienkrebs/ts-runtime-lane.mjs — the strict-runtime lane (spawns the test command, parses diagnostics)
+kanarienkrebs/csharp-roslyn-lane.mjs — scaffold C#/.NET lane boundary (phase-1 fail-closed placeholder)
 fixtures/canary-runtime/ — the validate-provider canary fixture
+fixtures/canary-csharp-roslyn/ — scaffold marker for the csharp-roslyn lane
 test/                    — node:test suite
 scripts/validate-provider.mjs — CI-facing gate: asserts the canary is caught
 ```
