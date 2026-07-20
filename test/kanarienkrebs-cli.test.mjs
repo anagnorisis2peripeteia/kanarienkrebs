@@ -14,6 +14,13 @@ test("cli --validate exits 0", () => {
   assert.match(res.stdout, /ENGINE_OK/);
 });
 
+test("cli --validate --lane csharp-roslyn exits 0 (scaffold lane is wired)", () => {
+  const res = spawnSync(process.execPath, [CLI, "--validate", "--lane", "csharp-roslyn"], { encoding: "utf8" });
+  assert.equal(res.status, 0, res.stdout + res.stderr);
+  assert.match(res.stdout, /ENGINE_OK/);
+  assert.match(res.stdout, /lane=csharp-roslyn/);
+});
+
 test("cli real run with trivial passing test-command exits 0 with PASS", () => {
   const res = spawnSync(
     process.execPath,

@@ -11,6 +11,7 @@
 //   go-race       : node kanarienkrebs/cli.mjs --validate --lane go       (requires `go`)
 //   python-dev    : node kanarienkrebs/cli.mjs --validate --lane python   (requires `python3`)
 //   dotnet-runtime: node kanarienkrebs/cli.mjs --validate --lane dotnet   (requires `dotnet`)
+//   csharp-roslyn : node kanarienkrebs/cli.mjs --validate --lane csharp-roslyn
 //   cpp-sanitizer : node kanarienkrebs/cli.mjs --validate --lane cpp      (requires `clang++`)
 //   metal-validation: node kanarienkrebs/cli.mjs --validate --lane metal  (requires `xcrun`/Metal)
 
@@ -31,6 +32,7 @@ const LANES = [
   { name: "go-race", args: ["--validate", "--lane", "go"], requires: "go" },
   { name: "python-dev", args: ["--validate", "--lane", "python"], requires: "python3" },
   { name: "dotnet-runtime", args: ["--validate", "--lane", "dotnet"], requires: "dotnet" },
+  { name: "csharp-roslyn", args: ["--validate", "--lane", "csharp-roslyn"] },
   { name: "cpp-sanitizer", args: ["--validate", "--lane", "cpp"], requires: "clang++" },
   // metal needs the Metal toolchain + a GPU; `xcrun` gates macOS, and the CLI itself
   // reports EX_UNAVAILABLE (=> SKIP below) if `xcrun -f metal` can't resolve the compiler.
